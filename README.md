@@ -4,7 +4,7 @@ The OUned project, an exploitation tool automating Organizational Units ACLs abu
 
 For a detailed explanation regarding the principle behind the attack, the necessary setup as well as how to use the tool, you may refer to the 
 associated article:
-https://www.synacktiv.com/publications/ouned
+https://www.synacktiv.com/publications/ounedpy-exploiting-hidden-organizational-units-acl-attack-vectors-in-active-directory
 
 # Installation
 
