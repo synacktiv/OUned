@@ -458,9 +458,15 @@ def main(
         targetEntry = input(f"{bcolors.OKBLUE}[+] Select which OU you want to target : {bcolors.ENDC}")
         try: 
             targetEntry = int(targetEntry)
-            
+            if(targetEntry > ldap_entries):
+                logger.critical(f"{bcolors.FAIL}[!] This OU does not exist.{bcolors.ENDC}")
+                clean(ldap_session, ldap_server_session, save_file_name)
+                sys.exit(1)
+
         except:
             logger.critical(f"{bcolors.FAIL}[!] Failed to parse as integer.{bcolors.ENDC}")
+            clean(ldap_session, ldap_server_session, save_file_name)
+            sys.exit(1)
         
         ou_dn = ldap_session.entries[targetEntry-1].entry_dn
         logger.warning(f"{bcolors.OKGREEN}[+] The OU has been successfully targeted. - {ou_dn}.{bcolors.ENDC}") 
