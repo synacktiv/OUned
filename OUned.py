@@ -445,9 +445,26 @@ def main(
     search_filter = f'(ou={ou})'
     attributes = [ALL_ATTRIBUTES]
     ldap_session.search(domain_dn, search_filter, SUBTREE, attributes=attributes)
-    if len(ldap_session.entries) == 1:
+    ldap_entries = len(ldap_session.entries)
+    if ldap_entries == 1:
         ou_dn = ldap_session.entries[0].entry_dn
         logger.warning(f"{bcolors.OKGREEN}[+] Organizational unit found - {ou_dn}.{bcolors.ENDC}")
+    elif ldap_entries >= 2:
+        logger.warning(f"{bcolors.OKBLUE}[+] Several OUs matching this name have been found.{bcolors.ENDC}")
+        numEntry = 0
+        for entry in ldap_session.entries:
+            logger.warning(f"{bcolors.OKBLUE}[+] {numEntry+1} :  {entry.entry_dn}.{bcolors.ENDC}")
+            numEntry+=1
+        targetEntry = input(f"{bcolors.OKBLUE}[+] Select which OU you want to target : {bcolors.ENDC}")
+        try: 
+            targetEntry = int(targetEntry)
+            
+        except:
+            logger.critical(f"{bcolors.FAIL}[!] Failed to parse as integer.{bcolors.ENDC}")
+        
+        ou_dn = ldap_session.entries[targetEntry-1].entry_dn
+        logger.warning(f"{bcolors.OKGREEN}[+] The OU has been successfully targeted. - {ou_dn}.{bcolors.ENDC}") 
+
     else:
         logger.error(f"{bcolors.FAIL}[!] Could not find Organizational Unit with name {ou}.{bcolors.ENDC}")
         clean(ldap_session, ldap_server_session, save_file_name)
