@@ -459,12 +459,9 @@ def main(
         try: 
             targetEntry = int(targetEntry)
             if(targetEntry > ldap_entries):
-                logger.critical(f"{bcolors.FAIL}[!] This OU does not exist.{bcolors.ENDC}")
-                clean(ldap_session, ldap_server_session, save_file_name)
-                sys.exit(1)
-
+                raise Exception
         except:
-            logger.critical(f"{bcolors.FAIL}[!] Failed to parse as integer.{bcolors.ENDC}")
+            logger.critical(f"{bcolors.FAIL}[!] Failed to select target OU.{bcolors.ENDC}")
             clean(ldap_session, ldap_server_session, save_file_name)
             sys.exit(1)
         
