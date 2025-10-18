@@ -2,6 +2,8 @@
 .vscode/
 .idea/
 
+config.ini
+
 # Vagrant
 .vagrant/
 
