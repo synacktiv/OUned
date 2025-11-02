@@ -7,13 +7,14 @@ from conf import CLEAN_DIR, bcolors
 
 def init_save_file(containerFQDN):
 
-    os.makedirs(os.path.join(CLEAN_DIR, containerFQDN), exist_ok=True)
-
     timestr = time.strftime("%Y_%m_%d-%H_%M_%S")
-    save_file_name = os.path.join(CLEAN_DIR, containerFQDN, timestr + ".txt")
+    save_dir = os.path.join(CLEAN_DIR, containerFQDN, timestr)
+    os.makedirs(save_dir, exist_ok=True)
+    os.mkdir(os.path.join(save_dir, "revert"))
+    save_file_name = os.path.join(save_dir, "cleaning.txt")
 
     open(save_file_name, "x")
-    return save_file_name
+    return save_dir, save_file_name
 
 def save_attribute_value(attribute_name, value, save_file, target, dn):
     with open(save_file, 'a') as f:
