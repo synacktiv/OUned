@@ -2,119 +2,82 @@
 
 The OUned project, an exploitation tool automating Organizational Units ACLs abuse through gPLink manipulation.
 
-For a detailed explanation regarding the principle behind the attack, the necessary setup as well as how to use the tool, you may refer to the 
-associated article:
-https://www.synacktiv.com/publications/ounedpy-exploiting-hidden-organizational-units-acl-attack-vectors-in-active-directory
+The principle behind the attack and the motivation behind the project was originally described in the following article: https://www.synacktiv.com/publications/ounedpy-exploiting-hidden-organizational-units-acl-attack-vectors-in-active-directory
 
-# Installation
+**The attack implementation described in the article (network forwarding for LDAP / SMB) was improved since the article's release. OUned now bundles its own LDAP and multiplexing SMB servers. No additional setup is necessary anymore outside of the OUned script.**
 
-Installation can be performed by cloning the repository and installing the dependencies:
+The old OUned implementation can still be accessed in the `old-forwarded` branch.
 
-```bash
-$ git clone https://github.com/synacktiv/OUned
-$ python3 -m pip install -r requirements.txt
-```
+
+# Attack pre-requisites
+
+The prerequisites necessary to carry out the attack are the following:
+- An account with the ability to modify the `gPLink` attribute of the target Organizational Unit
+- A machine account with an LDAP SPN, used to simulate an LDAP server. Can be created with the `addcomputer_LDAP_spn.py` script, or, if you compromised an existing account, machine accounts can modify / add items to their own SPNs.
+- A machine account with a HOST SPN, used to simulate an SMB server. This can be the same as the machine account with the LDAP SPN.
+- A DNS record resolving the machine account to the machine running the OUned script. If you are using an existing, compromised machine, you can also simply reverse port-forward ports 445 and 389.
 
 # Configuration file
 
-OUned arguments are provided through a configuration file - an example file is provided in the repository, `config.example.ini`. 
+OUned arguments are specified through a configuration file - an example file is provided in the repository, `config.example.ini`. 
 
-Each entry is described by a comment, but for detailed configuration instruction, please refer to the article mentioned in the introduction above.
 ```ini
 [GENERAL]
-# The target domain name
+# The Distinguished Name of the target Organizational Unit
+ou-dn=OU=SERVERS,DC=corp,DC=com
+
+# Generic domain information
 domain=corp.com
+dc-fqdn=ad01-dc.corp.com
+#dc-ip=192.168.123.10
 
-# The target DC. If not specified, defaults to the domain name
-#dc=192.168.123.10
-
-# The Distinguished Name of the target container
-containerDN=OU=SERVERS,DC=corp,DC=com
-
-# The username and password of the user having write permissions on the gPLink attribute of the target container
-username=naugustine
-password=Password1
-
-# The IP address of the attacker machine on the internal network
-attacker_ip=192.168.123.16
-
-# The command that should be executed by child objects. Specifying a command will inject an immediate Scheduled Task
-command=whoami > C:\poc.txt
-# Alternatively to the 'command' option, you can provide a module file with the GroupPolicyBackdoor syntax - see https://github.com/synacktiv/GroupPolicyBackdoor/wiki. 'Command' and 'module' are mutually exclusive
-# module=Scheduledtask_add_computer.ini
-
-# The kind of objects targeted ("computer" or "user")
-target_type=computer
-
+# User with rights to modify target gPLink attribute
+username=anail
+#password=Password1
+hash=64F12CDDAA88057E06A81B54E73B949B
+kerberos=False
+ldaps=True
 
 [LDAP]
-# The IP address of the dummy domain controller that will act as an LDAP server
-ldap_ip=192.168.125.245
-
-# Optional (used for sanity checks) - the hostname of the dummy domain controller
-ldap_hostname=WIN-TTEBC5VH747
-
-# The username and password of a domain administrator on the dummy domain controller 
-ldap_username=ldapadm
-ldap_password=Password1!
-
-# The ID of the GPO (can be empty, only needs to exist) on the dummy domain controller
-gpo_id=7B7D6B23-26F8-4E4B-AF23-F9B9005167F6
-
-# The machine account name and password on the target domain that will be used to fake the LDAP server delivering the GPC
-ldap_machine_name=OUNED$
-ldap_machine_password=some_very_long_random_password
+# Details regarding the account with the LDAP SPN for GPC. Provide NT hash if it is configured for RC4, AES key otherwise
+ldap-machine=SCAPY$
+#ldap-nt=7facdc498ed1680c4fd1448319a8c04f
+ldap-aes=c2e2bee9c44cdbb2be3d438be986e74ccb3d4e6b401e7e3cf6a83225cb841822
+ldap-iface=eth0
 
 [SMB]
-# The SMB mode can be embedded or forwarded depending on the kind of object targeted
-smb_mode=embedded
+# SMB mode can be either domain or embedded. 'Domain' means that you want to use the SMB share of another machine in the domain.
+# Embedded means that you want to use OUned's embedded SMB server
+smb-mode=embedded
 
-# The name of the SMB share. Can be anything for embedded mode, should match an existing share on SMB dummy domain controller for forwarded mode
-share_name=synacktiv
+# Details regarding the account acting as an SMB server for the GPT.
+smb-machine=SCAPY$
+smb-ip=192.168.123.20
+smb-nt=7facdc498ed1680c4fd1448319a8c04f
+smb-share=ouned
+smb-iface=eth0
 
-# The IP address of the dummy domain controller that will act as a SMB server. Only useful in forwarded mode
-#smb_ip=192.168.126.206
+[COMMANDS]
+# For commands to be executed, you can provide module files (see https://github.com/synacktiv/GroupPolicyBackdoor/wiki and https://github.com/synacktiv/GroupPolicyBackdoor/tree/master/modules_templates)
+# You can specify multiple module files, separated by commas
+modules=/home/user/modules/ImmediateTask_computer.ini
 
-# The username and password of a user having write access to the share on the SMB dummy domain controller. Only useful in forwarded mode
-#smb_username=smbadm
-#smb_password=Password1!
-
-# The machine account name and password on the target domain that will be used to fake the SMB server delivering the GPT. Only useful in forwarded mode
-#smb_machine_name=OUNED2$
-#smb_machine_password=some_very_long_random_password
+# For convenience, you can also alternatively specify a command, command_type (either computer or user) and a command_shell (cmd or powershell).
+# This will simply create an immediate task running as SYSTEM
+#command=whoami > C:\OUT.txt
+#command-type=computer
+#command-shell=cmd
 ```
 
-# OUned usage
+# Video demonstration
 
-The only mandatory argument when running OUned is the `--config` flag indicating the path to the configuration file. 
+![demo](./assets/demo.gif)
 
-The `--just-coerce` and `coerce-to` flags are used for SMB authentication coercion mode, in which OUned will force SMB authentication from 
-OU child objects to the specified destination - for more details, see the article linked in the introduction.
-
-Regarding the `--just-clean` flag, see the next section.
-
-```
-python3 OUned.py --help
-                                                                                                                                                                                    
- Usage: OUned.py [OPTIONS]                                                                                                                                                          
-                                                                                                                                                                                    
-╭─ Options ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ *  --config               TEXT  The configuration file for OUned [default: None] [required]                                                                                      │
-│    --skip-checks                Do not perform the various checks related to the exploitation setup                                                                              │
-│    --just-coerce                Only coerce SMB NTLM authentication of OU child objects to the destination specified in the --coerce-to flag, or, if no destination is           │
-│                                 specified, to a local SMB server that will print their NetNTLMv2 hashes                                                                          │
-│    --coerce-to            TEXT  Coerce child objects SMB NTLM authentication to a specific destination - this argument should be an IP address [default: None]                   │
-│    --just-clean                 This flag indicates that OUned should only perform cleaning actions from specified cleaning-file                                                 │
-│    --cleaning-file        TEXT  The path to the cleaning file in case the --just-clean flag is used [default: None]                                                              │
-│    --verbose                    Enable verbose output                                                                                                                            │
-│    --help                       Show this message and exit.                                                                                                                      │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-```
 
 # About cleaning
 
-By default and as explained in the article, OUned will perform cleaning actions and among others restore the original gPLink value in the target domain. In case the exploit could not exit properly, OUned creates a cleaning file each time the exploit is executed, that can be used later on to restore legitimate values by using the `--just-clean` flag; for instance:
+By default, OUned will perform cleaning actions and among others restore the original gPLink value in the target domain. In case the exploit could not exit properly, OUned creates a cleaning file each time the exploit is executed, that can be used later on to restore legitimate values by using the `--clean` flag; for instance:
 
 ```bash
-$ python3 OUned.py --config config.example.ini --just-clean --cleaning-file cleaning/FINANCE/2024_04_14-05_02_46.txt
+$ python3 OUned.py --config config.example.ini --clean cleaning/2026_07_31_064102_036100/
 ```

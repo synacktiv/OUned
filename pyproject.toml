@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "OUned"
+version = "2.0"
+description = "The Ouned project, automating containers attacks via gPLink poisoning"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [
+    { name = "Quentin Roland", email = "quentin.roland@synacktiv.com" },
+]
+classifiers = [
+    "Programming Language :: Python",
+]
+dependencies = [
+    "typer[all]",
+    "gssapi",
+    "ldap3-bleeding-edge >= 2.10.1.1337",
+    "gpblib @ git+https://github.com/synacktiv/gpblib@master#egg=gpblib",
+]
+
+[project.urls]
+Homepage = "https://github.com/synacktiv/OUned"
+
+[project.scripts]
+ouned = "OUned:app"
+
+[tool.setuptools]
+py-modules = ["OUned"]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["helpers", "helpers.*"]
