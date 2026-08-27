@@ -69,10 +69,6 @@ modules=/home/user/modules/ImmediateTask_computer.ini
 #command-shell=cmd
 ```
 
-# Video demonstration
-
-![demo](./assets/demo.gif)
-
 
 # About cleaning
 
@@ -81,3 +77,9 @@ By default, OUned will perform cleaning actions and among others restore the ori
 ```bash
 $ python3 OUned.py --config config.example.ini --clean cleaning/2026_07_31_064102_036100/
 ```
+
+
+# Video demonstration
+
+![demo](./assets/demo.gif)
+
