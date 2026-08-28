@@ -81,5 +81,5 @@ $ python3 OUned.py --config config.example.ini --clean cleaning/2026_07_31_06410
 
 # Video demonstration
 
-![demo](./assets/demo.gif)
+For a video demonstration, see [the demo gif](assets/demo.gif).
 
