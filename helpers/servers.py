@@ -59,7 +59,7 @@ def start_servers(config: Config, clean_folder: str, verbose: int):
 
     start_smb_server = (config.smb_mode != "domain")
     if start_smb_server:
-        smb_ssp = NTLMSSP_DOMAIN(UPN=f"{config.smb_machine[:-1]}@{config.domain}", HASHNT=bytes.fromhex(config.smb_nt), DC_FQDN=config.dc_fqdn, DC_IP=config.dc_ip, verb=False)
+        smb_ssp = NTLMSSP_DOMAIN(UPN=f"{config.smb_machine[:-1]}@{config.domain}", HASHNT=bytes.fromhex(config.smb_nt), DOMAIN_NB_NAME=config.domain_netbios, DC_FQDN=config.dc_fqdn, DC_IP=config.dc_ip, verb=False)
     else:
         smb_ssp = None
 

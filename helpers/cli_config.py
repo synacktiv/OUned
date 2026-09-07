@@ -9,6 +9,7 @@ from helpers.utils import logger
 class Config:
     ou_dn: str
     domain: str
+    domain_netbios: Optional[str]
     dc_fqdn: str
     dc_ip: str
     gpo_guid: str
@@ -55,6 +56,7 @@ def parse_config(config_path: str, clean: bool = False) -> Config:
 
     ou_dn = options.get("GENERAL", "ou-dn", fallback=None)
     domain = options.get("GENERAL", "domain", fallback=None)
+    domain_netbios = options.get("GENERAL", "domain-netbios", fallback=None)
     dc_fqdn = options.get("GENERAL", "dc-fqdn", fallback=None)
     dc_ip = options.get("GENERAL", "dc-ip", fallback=dc_fqdn)
     gpo_guid = str(uuid.uuid4()).upper()
@@ -83,6 +85,7 @@ def parse_config(config_path: str, clean: bool = False) -> Config:
         return Config(
             ou_dn=ou_dn,
             domain=domain,
+            domain_netbios=domain_netbios,
             dc_fqdn=dc_fqdn,
             dc_ip=dc_ip,
             gpo_guid=gpo_guid,
@@ -199,6 +202,7 @@ def parse_config(config_path: str, clean: bool = False) -> Config:
     return Config(
         ou_dn=ou_dn,
         domain=domain,
+        domain_netbios=domain_netbios,
         dc_fqdn=dc_fqdn,
         dc_ip=dc_ip,
         gpo_guid=gpo_guid,
