@@ -37,6 +37,12 @@ def create_gpt(cfg, clean_folder: str) -> dict:
     modules = validate_modules(modules)
     logger.warning(f"{bcolors.OKGREEN}[+] All modules validated{bcolors.ENDC}")
     modules = dispatch(modules, clean_folder)
+    # Calculate the version number
+    versionNumber = 10
+    if len(modules["computer"].keys()) > 0:
+        versionNumber += 1
+    if len(modules["user"].keys()) > 0:
+        versionNumber += 65536
 
     gpt_dir = f"{clean_folder}/GPT"
 
@@ -45,7 +51,11 @@ def create_gpt(cfg, clean_folder: str) -> dict:
     os.makedirs(f"{gpt_dir}/User", exist_ok=True)
 
     with open(f"{gpt_dir}/gpt.ini", "w") as f:
-        f.write("[General]\nVersion=10\ndisplayName=New Group Policy Object\n")
+        f.write(
+            f"[General]\n"
+            f"Version={versionNumber}\n"
+            f"displayName=New Group Policy Object\n"
+        )
 
     for module_type, module_list in modules.items():
         base_path = fr"{gpt_dir}/User" if module_type == "user" else fr"{gpt_dir}/Machine"
